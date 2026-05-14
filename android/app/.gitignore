@@ -1,0 +1,39 @@
+# Android Build Files
+/build
+.gradle
+.idea
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+*.iml
+
+# Generated Files
+/captures
+.externalNativeBuild
+.cxx
+
+# IDE
+.idea/
+*.iws
+*.ipr
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/
+gradlew
+gradlew.bat
+gradle/
+
+# Environment
+.env
+.env.local

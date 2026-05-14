@@ -1,0 +1,39 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Capacitor
+www/
+android/app/src/main/assets/public/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Android
+.gradle/
+build/
+captures/
+*.apk
+*.aar
+*.jks
+*.keystore
+local.properties
+.externalNativeBuild/
+.cxx/
+
+# Gemini / Internal
+.gemini/
+brain/
+*.log
+
+# Sensitive Files
+*.key
+*.pem
+config.json

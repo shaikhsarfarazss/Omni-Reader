@@ -1,0 +1,16 @@
+{
+    "appId": "com.omnireader.hybrid",
+    "appName": "OmniReader",
+    "webDir": "www",
+    "bundledWebRuntime": false,
+    "plugins": {
+        "SplashScreen": {
+            "launchShowDuration": 0
+        }
+    },
+    "android": {
+        "allowMixedContent": true,
+        "captureInput": true,
+        "webContentsDebuggingEnabled": true
+    }
+}
