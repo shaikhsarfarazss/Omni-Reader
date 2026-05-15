@@ -15,18 +15,24 @@ android/app/src/main/assets/public/
 *.swp
 *.swo
 .DS_Store
+*.iws
+*.ipr
+*.iml
 
 # Android
 .gradle/
 build/
 captures/
 *.apk
-*.aar
+*.aab
 *.jks
 *.keystore
 local.properties
 .externalNativeBuild/
 .cxx/
+gradlew
+gradlew.bat
+gradle/
 
 # Gemini / Internal
 .gemini/
@@ -37,3 +43,5 @@ brain/
 *.key
 *.pem
 config.json
+.env
+.env.local
