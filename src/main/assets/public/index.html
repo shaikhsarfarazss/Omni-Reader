@@ -5262,80 +5262,74 @@
         // Handles: bare arrays, objects wrapping arrays, code-fenced JSON, and extra prose
         function extractJSON(text) {
             if (!text) return null;
-            let cleanText = text.trim();
-            // Strip markdown code fences
-            if (cleanText.includes("```")) {
-                const matches = cleanText.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-                if (matches && matches[1]) {
-                    cleanText = matches[1].trim();
+
+            // Try multiple extraction strategies
+            const strategies = [
+                // Strategy 1: Direct JSON parse
+                () => JSON.parse(text.trim()),
+
+                // Strategy 2: Extract from code blocks
+                () => {
+                    const codeMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+                    if (codeMatch) return JSON.parse(codeMatch[1].trim());
+                    throw new Error('No code block');
+                },
+
+                // Strategy 3: Find array boundaries
+                () => {
+                    const startIdx = text.indexOf('[');
+                    const endIdx = text.lastIndexOf(']');
+                    if (startIdx !== -1 && endIdx > startIdx) {
+                        const slice = text.substring(startIdx, endIdx + 1);
+                        return JSON.parse(slice);
+                    }
+                    throw new Error('No array found');
+                },
+
+                // Strategy 4: Find object boundaries  
+                () => {
+                    const startIdx = text.indexOf('{');
+                    const endIdx = text.lastIndexOf('}');
+                    if (startIdx !== -1 && endIdx > startIdx) {
+                        const slice = text.substring(startIdx, endIdx + 1);
+                        const parsed = JSON.parse(slice);
+                        // Look for array in object properties
+                        for (const key of ['questions', 'quiz', 'flashcards', 'cards', 'data', 'items']) {
+                            if (Array.isArray(parsed[key])) return parsed[key];
+                        }
+                        return parsed;
+                    }
+                    throw new Error('No object found');
+                },
+
+                // Strategy 5: Clean and retry
+                () => {
+                    let cleaned = text
+                        .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas
+                        .replace(/([{,]\s*)(\w+):/g, '$1"$2":') // Quote unquoted keys
+                        .replace(/:\s*'([^']*)'/g, ': "$1"') // Convert single quotes
+                        .replace(/\n/g, ' ') // Remove newlines
+                        .trim();
+
+                    return JSON.parse(cleaned);
                 }
-            }
+            ];
 
-            // Clean trailing commas and replace backticks with double quotes to ease parsing
-            cleanText = cleanText.replace(/,(\s*[\]}])/g, '$1');
-
-            // Try parsing as-is first (handles clean object or array responses)
-            let parsed = null;
-            try {
-                parsed = JSON.parse(cleanText);
-            } catch (e) {
-                // Try loose evaluation
+            for (const strategy of strategies) {
                 try {
-                    parsed = Function("return (" + cleanText + ")")();
-                } catch (e2) {
-                    // Fall through to bracket extraction
-                }
-            }
-
-            // If direct parse failed, try to extract array slice
-            if (!parsed) {
-                const startIdx = cleanText.indexOf('[');
-                const endIdx = cleanText.lastIndexOf(']');
-                if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-                    const slice = cleanText.substring(startIdx, endIdx + 1);
-                    try {
-                        parsed = JSON.parse(slice);
-                    } catch (e) {
-                        try {
-                            parsed = Function("return (" + slice + ")")();
-                        } catch (e2) {
-                            // Try object slice
-                            const objStart = cleanText.indexOf('{');
-                            const objEnd = cleanText.lastIndexOf('}');
-                            if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
-                                const objSlice = cleanText.substring(objStart, objEnd + 1);
-                                try {
-                                    parsed = JSON.parse(objSlice);
-                                } catch (e3) {
-                                    try {
-                                        parsed = Function("return (" + objSlice + ")")();
-                                    } catch (e4) {
-                                        console.error("JSON parsing error:", e4, "Raw:", cleanText);
-                                    }
-                                }
-                            }
+                    const result = strategy();
+                    if (Array.isArray(result)) return result;
+                    if (typeof result === 'object' && result !== null) {
+                        // Extract array from object
+                        for (const key of Object.keys(result)) {
+                            if (Array.isArray(result[key])) return result[key];
                         }
                     }
+                } catch (e) {
+                    // Continue to next strategy
                 }
             }
-            if (!parsed) return null;
-            // If already an array, return it
-            if (Array.isArray(parsed)) return parsed;
-            // If it's an object, dig for the array inside common wrapper keys
-            if (typeof parsed === 'object') {
-                // Common wrapper keys Ollama/LLMs use
-                const candidateKeys = [
-                    'questions', 'quiz', 'items', 'data', 'results',
-                    'flashcards', 'cards', 'deck', 'list', 'output'
-                ];
-                for (const key of candidateKeys) {
-                    if (Array.isArray(parsed[key])) return parsed[key];
-                }
-                // Last resort: find ANY array-valued property
-                for (const key of Object.keys(parsed)) {
-                    if (Array.isArray(parsed[key])) return parsed[key];
-                }
-            }
+
             return null;
         }
 

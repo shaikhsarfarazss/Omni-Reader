@@ -1549,6 +1549,24 @@ function toggleLoop() {
             }
         };
 
+        function extractJSON(str) {
+            try {
+                const first = str.indexOf('{');
+                const last = str.lastIndexOf('}');
+                if (first !== -1 && last !== -1 && last > first) {
+                    return JSON.parse(str.substring(first, last + 1));
+                }
+                const firstArr = str.indexOf('[');
+                const lastArr = str.lastIndexOf(']');
+                if (firstArr !== -1 && lastArr !== -1 && lastArr > firstArr) {
+                    return JSON.parse(str.substring(firstArr, lastArr + 1));
+                }
+            } catch (e) {
+                console.warn("extractJSON failed:", e);
+            }
+            return null;
+        }
+
         async function processAI(action) {
             synth.cancel(); isPlaying = false; updateUI();
             if (document.getElementById('ai-tools-dropdown')) {
@@ -1580,8 +1598,8 @@ function toggleLoop() {
                 summary: "Summarize the following text clearly and concisely:",
                 explain: "Explain the concepts in the following text in simple terms:",
                 simplify: "Simplify this text so a 5th grader can understand:",
-                quiz: "Generate 3 multiple choice questions (with answers) based on this text:",
-                cards: "Generate 3 flashcards in Front/Back format based on this text:",
+                quiz: "Generate 3 multiple choice questions based on this text. Return ONLY a JSON array of objects with 'question', 'options' (array of 4), and 'answer' (the correct string) fields.",
+                cards: "Generate 3 flashcards based on this text. Return ONLY a JSON array of objects with 'front' and 'back' fields.",
                 lecture: "Give a brief lecture-style explanation of this text:",
                 ask: "Answer the following question about this text:"
             };
@@ -1625,6 +1643,22 @@ function toggleLoop() {
                 else if (provider === 'openai' || provider === 'meta' || provider === 'deepseek') resText = data.choices[0].message.content;
                 else if (provider === 'claude') resText = data.content[0].text;
                 else if (provider === 'ollama') resText = data.response;
+
+                if (action === 'quiz' || action === 'cards') {
+                    const jsonData = extractJSON(resText);
+                    if (jsonData) {
+                        if (action === 'quiz' && Array.isArray(jsonData)) {
+                            resText = jsonData.map((q, i) => `<b>${i + 1}. ${q.question}</b><br>` +
+                                (q.options ? q.options.map(o => `• ${o}`).join('<br>') : "") +
+                                `<br><i style="color:var(--primary-color)">Answer: ${q.answer}</i>`).join('<br><br>');
+                        } else if (action === 'cards' && Array.isArray(jsonData)) {
+                            resText = jsonData.map((c, i) => `<div style="border:1px solid #ccc; padding:10px; margin:5px; border-radius:8px"><b>Front:</b> ${c.front}<br><hr><b>Back:</b> ${c.back}</div>`).join('');
+                        }
+                        content.innerHTML = resText;
+                        return;
+                    }
+                }
+
                 let globalIdx = 0;
                 content.innerHTML = resText.split(/(\s+)/).map(word => {
                     if (!word.trim()) return word;
