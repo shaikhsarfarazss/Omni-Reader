@@ -62,5 +62,5 @@ To unlock the full power of OmniReader's AI features, you can configure your API
 
 ---
 
-Developed with ❤️ by the OmniReader Team.
+Developed with ❤️ by Sarfaraz Shaikh
 *Transforming the way the world reads.*
