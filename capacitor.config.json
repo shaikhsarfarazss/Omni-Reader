@@ -1,7 +1,7 @@
 {
     "appId": "com.omnireader.hybrid",
     "appName": "OmniReader",
-    "webDir": "www",
+    "webDir": "src/main/assets/public",
     "bundledWebRuntime": false,
     "plugins": {
         "SplashScreen": {

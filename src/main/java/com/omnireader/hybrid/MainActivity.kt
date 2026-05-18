@@ -134,6 +134,15 @@ class NativeTTS : Plugin() {
             Log.d(TAG, "TTS Init finished with status: $status, isReady: $isReady")
 
             if (isReady) {
+                try {
+                    val installIntent = Intent()
+                    installIntent.action = TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA
+                    installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(installIntent)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to launch TTS install intent", e)
+                }
+
                 val result = tts?.setLanguage(Locale.getDefault())
                 Log.d(TAG, "TTS Language default set result: $result")
 
@@ -332,8 +341,10 @@ class NativeTTS : Plugin() {
         val voicesArray = com.getcapacitor.JSArray()
 
         voices.filter { voice ->
+            val tag = voice.locale.toLanguageTag()
+            (tag.startsWith("en-IN") || tag.startsWith("hi-IN") || tag.startsWith("en-")) &&
             !voice.isNetworkConnectionRequired &&
-                    (tts?.isLanguageAvailable(voice.locale) ?: TextToSpeech.LANG_NOT_SUPPORTED) >= TextToSpeech.LANG_AVAILABLE
+            (tts?.isLanguageAvailable(voice.locale) ?: TextToSpeech.LANG_NOT_SUPPORTED) >= TextToSpeech.LANG_AVAILABLE
         }
             .sortedBy { it.locale.displayName }
             .forEach { voice ->

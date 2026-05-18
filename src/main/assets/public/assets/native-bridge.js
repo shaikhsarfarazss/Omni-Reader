@@ -1226,10 +1226,6 @@
   window.NativeTTS = NativeTTS;
   App.addListener("appUrlOpen", async (data) => {
     try {
-      if (!data || !data.url) return;
-      if (typeof window.Capacitor !== "undefined" && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === "android") {
-        return;
-      }
       if (data.url.startsWith("content://") || data.url.startsWith("file://")) {
         const contents = await Filesystem.readFile({
           path: data.url

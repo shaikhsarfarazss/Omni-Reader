@@ -1,15 +1,25 @@
 
+        const DEFAULT_OLLAMA_URL = 'http://192.168.0.101:11434';
+        const DEFAULT_OLLAMA_MODEL = 'gemma3:e2b';
         let AI_CONFIG = JSON.parse(localStorage.getItem('AI_CONFIG')) || {
-            activeProvider: 'gemini',
-            keys: {
-                gemini: '',
-                openai: '',
-                claude: '',
-                deepseek: '',
-                marit: '',
-                ollama: 'http://localhost:11434'
-            }
+            activeProvider: 'ollama',
+            ollamaModel: DEFAULT_OLLAMA_MODEL,
+            keys: { gemini: '', openai: '', claude: '', deepseek: '', meta: '', ollama: DEFAULT_OLLAMA_URL }
         };
+        if (!AI_CONFIG.keys.ollama
+            || AI_CONFIG.keys.ollama === 'http://localhost:11434'
+            || AI_CONFIG.keys.ollama.trim() === '') {
+            AI_CONFIG.keys.ollama = DEFAULT_OLLAMA_URL;
+        }
+        if (!AI_CONFIG.ollamaModel || AI_CONFIG.ollamaModel.trim() === '') {
+            AI_CONFIG.ollamaModel = DEFAULT_OLLAMA_MODEL;
+        }
+        const hasAnyOtherKey = ['gemini', 'openai', 'claude', 'deepseek', 'meta']
+            .some(p => AI_CONFIG.keys[p] && AI_CONFIG.keys[p].length > 10);
+        if (!hasAnyOtherKey) {
+            AI_CONFIG.activeProvider = 'ollama';
+        }
+        localStorage.setItem('AI_CONFIG', JSON.stringify(AI_CONFIG));
 
         console.log("OmniReader Script Initializing...");
         console.log("Initial window.speechSynthesis: " + (typeof window.speechSynthesis !== 'undefined'));
@@ -112,18 +122,65 @@ const TTSEngine = {
     _renderVoiceList() {
         const list = document.getElementById('voice-list');
         if (!list) return;
-        list.innerHTML = availableVoices.length > 0
-            ? availableVoices.map(v =>
-                `<button class="w-full text-left p-2 text-[10px] hover:bg-pink-50 rounded"
-                    onclick="setVoice('${v.name.replace(/'/g, "\\'")}')">${v.name} (${v.locale})</button>`
-              ).join("")
-            : `<div class="p-2 text-gray-400 text-[10px]">No voices available</div>`;
+        if (!availableVoices.length) {
+            list.innerHTML = `<div class="p-3 text-gray-400 text-xs">Loading voices...</div>`;
+            return;
+        }
+        // STRICT matching — only real en-IN locale voices count as Indian
+        const indianVoice = availableVoices.find(v => /^en[-_]IN$/i.test(v.locale))
+            || availableVoices.find(v => /^hi[-_]IN$/i.test(v.locale));
+        // STRICT US English
+        const usVoice = availableVoices.find(v => /^en[-_]US$/i.test(v.locale))
+            || availableVoices.find(v => /^en[-_]GB$/i.test(v.locale));
+        // Build voice list dynamically
+        const displayVoices = [];
+        if (indianVoice) {
+            displayVoices.push({ voice: indianVoice, label: 'Indian English', flag: '🇮🇳', sublabel: indianVoice.locale });
+        }
+        if (usVoice && usVoice !== indianVoice) {
+            displayVoices.push({ voice: usVoice, label: 'US English', flag: '🇺🇸', sublabel: usVoice.locale });
+        }
+        // If no Indian voice found, show a warning + offer first 2 English voices
+        if (!indianVoice) {
+            const allEnglish = availableVoices.filter(v => /^en/i.test(v.locale)).slice(0, 2);
+            displayVoices.length = 0;
+            allEnglish.forEach((v, i) => {
+                displayVoices.push({
+                    voice: v,
+                    label: v.name.length > 22 ? v.name.substring(0, 22) + '…' : v.name,
+                    flag: '🌐',
+                    sublabel: v.locale
+                });
+            });
+        }
+        if (!displayVoices.length) {
+            list.innerHTML = `<div class="p-3 text-gray-400 text-xs">No English voices found on device. Install one in Android Settings → Language → Text-to-Speech.</div>`;
+            return;
+        }
+        list.innerHTML = displayVoices.map(item => {
+            const isActive = currentVoice && currentVoice.name === item.voice.name;
+            return `<button class="w-full text-left p-3 text-xs hover:bg-pink-50 rounded-lg flex items-center gap-3 ${isActive ? 'bg-pink-50 border border-pink-200' : ''}"
+                onclick="setVoice('${item.voice.name.replace(/'/g, "\\'")}')">
+                <span class="text-lg">${item.flag}</span>
+                <div class="flex-grow min-w-0">
+                    <div class="font-bold text-gray-800 truncate">${item.label}</div>
+                    <div class="text-[9px] text-gray-400 truncate">${item.sublabel}</div>
+                </div>
+                ${isActive ? '<i class="fas fa-check text-pink-500 text-xs"></i>' : ''}
+            </button>`;
+        }).join('');
+        // Add a helpful note if no Indian voice
+        if (!indianVoice) {
+            list.innerHTML += `<div class="mt-2 p-2 text-[9px] text-amber-600 bg-amber-50 rounded-lg leading-tight">
+                ⚠️ No Indian English voice installed. Go to <b>Android Settings → System → Languages → Text-to-Speech → Install voice data → English (India)</b>.
+            </div>`;
+        }
     },
     _pickDefaultVoice() {
         if (currentVoice || !availableVoices.length) return;
-        const devLang = (navigator.language || 'en').split('-')[0];
-        currentVoice = availableVoices.find(v => v.locale.startsWith(devLang))
-            || availableVoices.find(v => v.locale.startsWith('en'))
+        // Force Indian English as default if available
+        currentVoice = availableVoices.find(v => /en[-_]IN|Indian/i.test(v.name + ' ' + v.locale))
+            || availableVoices.find(v => /en[-_]US|Default/i.test(v.name + ' ' + v.locale))
             || availableVoices[0];
     },
     _registerNativeListeners() {
@@ -561,8 +618,34 @@ setTimeout(() => TTSEngine.init(), 500);
         function toggleAITools(e) {
             e.stopPropagation();
             const dropdown = document.getElementById('ai-tools-dropdown');
+            if (!dropdown) return;
+            const wasHidden = dropdown.classList.contains('hidden');
             dropdown.classList.toggle('hidden');
             updateApiKeyUI();
+            if (wasHidden && AI_CONFIG.activeProvider === 'ollama') {
+                silentOllamaPing();
+            }
+        }
+
+        async function silentOllamaPing() {
+            const url = (AI_CONFIG.keys.ollama || DEFAULT_OLLAMA_URL).replace(/\/+$/, '');
+            const status = document.getElementById('api-status');
+            if (!status) return;
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(() => controller.abort(), 3000);
+                const res = await fetch(`${url}/api/tags`, { signal: controller.signal });
+                clearTimeout(t);
+                if (res.ok) {
+                    status.textContent = 'Connected';
+                    status.className = 'text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold';
+                    status.classList.remove('hidden');
+                } else throw new Error();
+            } catch {
+                status.textContent = 'Offline';
+                status.className = 'text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold';
+                status.classList.remove('hidden');
+            }
         }
 
         function updateApiKeyUI() {
@@ -572,11 +655,29 @@ setTimeout(() => TTSEngine.init(), 500);
             const status = document.getElementById('api-status');
             const input = document.getElementById('api-key-input');
             const select = document.getElementById('provider-select');
-
+            const modelRow = document.getElementById('ollama-model-row');
+            const modelInput = document.getElementById('ollama-model-input');
+            const testBtn = document.getElementById('ollama-test-btn');
+            const helpText = document.getElementById('ollama-help-text');
             select.value = provider;
-            label.innerText = provider.charAt(0).toUpperCase() + provider.slice(1) + (provider === 'ollama' ? ' URL' : ' Key');
-            input.value = key || '';
-
+            if (provider === 'ollama') {
+                label.innerText = 'Ollama URL';
+                input.type = 'text';
+                input.placeholder = DEFAULT_OLLAMA_URL;
+                input.value = key || DEFAULT_OLLAMA_URL;
+                if (modelRow) modelRow.classList.remove('hidden');
+                if (modelInput) modelInput.value = AI_CONFIG.ollamaModel || DEFAULT_OLLAMA_MODEL;
+                if (testBtn) testBtn.classList.remove('hidden');
+                if (helpText) helpText.classList.remove('hidden');
+            } else {
+                label.innerText = provider.charAt(0).toUpperCase() + provider.slice(1) + ' Key';
+                input.type = 'password';
+                input.placeholder = 'Enter API Key...';
+                input.value = key || '';
+                if (modelRow) modelRow.classList.add('hidden');
+                if (testBtn) testBtn.classList.add('hidden');
+                if (helpText) helpText.classList.add('hidden');
+            }
             if (key && (key.length > 10 || provider === 'ollama')) {
                 status.classList.remove('hidden');
             } else {
@@ -592,12 +693,47 @@ setTimeout(() => TTSEngine.init(), 500);
 
         function saveCurrentApiKey() {
             const key = document.getElementById('api-key-input').value.trim();
-            const provider = AI_CONFIG.activeProvider;
-
-            AI_CONFIG.keys[provider] = key;
+            AI_CONFIG.keys[AI_CONFIG.activeProvider] = key;
+            if (AI_CONFIG.activeProvider === 'ollama') {
+                const modelInput = document.getElementById('ollama-model-input');
+                if (modelInput) {
+                    AI_CONFIG.ollamaModel = modelInput.value.trim() || DEFAULT_OLLAMA_MODEL;
+                }
+            }
             localStorage.setItem('AI_CONFIG', JSON.stringify(AI_CONFIG));
             updateApiKeyUI();
-            alert(`âœ“ ${provider.toUpperCase()} config saved!`);
+            if (typeof showToast !== 'undefined') showToast(`✓ ${AI_CONFIG.activeProvider.toUpperCase()} config saved!`);
+            else alert(`✓ ${AI_CONFIG.activeProvider.toUpperCase()} config saved!`);
+        }
+
+        async function testOllamaConnection() {
+            const urlInput = document.getElementById('api-key-input');
+            const modelInput = document.getElementById('ollama-model-input');
+            const url = (urlInput.value.trim() || DEFAULT_OLLAMA_URL).replace(/\/+$/, '');
+            const model = (modelInput && modelInput.value.trim()) || DEFAULT_OLLAMA_MODEL;
+            if (typeof showToast !== 'undefined') showToast('Testing connection...', 1500);
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(() => controller.abort(), 8000);
+                const res = await fetch(`${url}/api/tags`, { signal: controller.signal });
+                clearTimeout(t);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                const models = (data.models || []).map(m => m.name);
+                if (!models.length) {
+                    if (typeof showToast !== 'undefined') showToast(`⚠ Connected but no models installed. Run: ollama pull ${model}`, 5000);
+                    else alert(`⚠ Connected but no models installed. Run: ollama pull ${model}`);
+                    return;
+                }
+                const hasModel = models.some(m => m.startsWith(model));
+                let msg = hasModel ? `✓ Connected. Available: ${models.slice(0, 3).join(', ')}` : `✓ Connected. Model "${model}" not found. Available: ${models.slice(0, 3).join(', ')}`;
+                if (typeof showToast !== 'undefined') showToast(msg, 4000);
+                else alert(msg);
+            } catch (err) {
+                let msg = err.name === 'AbortError' ? '✗ Timeout — Ollama not responding' : `✗ ${err.message || 'Connection failed'}`;
+                if (typeof showToast !== 'undefined') showToast(msg, 4000);
+                else alert(msg);
+            }
         }
 
         // Close dropdown when clicking outside
@@ -772,11 +908,63 @@ setTimeout(() => TTSEngine.init(), 500);
 
         async function setVoice(name) {
             const wasPlaying = isPlaying;
-            synth.cancel();
-            currentVoice = availableVoices.find(v => v.name === name);
+            const wasSelectionReading = isSelectionReading;
+            const previousSelectedText = activeSelectedText;
+            const resumeIdx = (currentMode === 'pdf') ? pdfActiveIndex : textActiveIndex;
+
+            // HARD STOP — clear all state
+            TTSEngine._loopIntent = false;
+            TTSEngine._loopRestartFn = null;
+            TTSEngine._chunks = [];
+            TTSEngine._chunkIndex = 0;
+            TTSEngine._activeSessionId = null;
+            isPlaying = false;
+            TTSEngine.cancel();
+
+            // Force-stop Web Speech twice (Chrome quirk)
+            if ('speechSynthesis' in window) {
+                try { window.speechSynthesis.cancel(); } catch(e) {}
+                await new Promise(r => setTimeout(r, 50));
+                try { window.speechSynthesis.cancel(); } catch(e) {}
+            }
+
+            if (!availableVoices.length) await TTSEngine.loadVoices();
+            const found = availableVoices.find(v => v.name === name);
+            if (!found) {
+                showToast('Voice not available', 2000);
+                return;
+            }
+            currentVoice = found;
+
+            // Re-cache matching Web Speech voice object
+            if (typeof ttsBackend !== 'undefined' && ttsBackend === 'web' && typeof webVoicesCache !== 'undefined' && webVoicesCache.length) {
+                const webMatch = webVoicesCache.find(v => v.name === found.name);
+                if (!webMatch) console.warn('Voice not found in webVoicesCache:', found.name);
+            }
+
+            // Verify with native bridge
+            if (typeof ttsBackend !== 'undefined' && ttsBackend === 'native' && window.NativeTTS && window.NativeTTS.setVoice) {
+                try {
+                    await window.NativeTTS.setVoice({ voiceName: found.name });
+                } catch (e) {
+                    console.warn('Native setVoice failed:', e);
+                }
+            }
+
+            TTSEngine._renderVoiceList();
+            const isIndian = /^en[-_]IN$|^hi[-_]IN$/i.test(found.locale);
+            showToast(`✓ ${isIndian ? 'Indian English 🇮🇳' : 'US English 🇺🇸'} — ${found.locale}`, 1800);
+            const popup = document.getElementById('voice-popup');
+            if (popup) popup.classList.add('hidden');
+
             if (wasPlaying) {
-                const idx = (currentMode === 'pdf') ? pdfActiveIndex : textActiveIndex;
-                speakFrom(Math.max(0, idx));
+                await new Promise(r => setTimeout(r, 250));
+                if (wasSelectionReading && previousSelectedText) {
+                    activeSelectedText = previousSelectedText;
+                    speakSelection(previousSelectedText);
+                } else {
+                    speakFrom(Math.max(0, resumeIdx));
+                }
             }
         }
 
@@ -1362,56 +1550,51 @@ function toggleLoop() {
         };
 
         async function processAI(action) {
-            // Stop current speech before starting AI processing
-            synth.cancel();
-            isPlaying = false;
-            updateUI();
-
+            synth.cancel(); isPlaying = false; updateUI();
+            if (document.getElementById('ai-tools-dropdown')) {
+                document.getElementById('ai-tools-dropdown').classList.add('hidden');
+            }
             const provider = AI_CONFIG.activeProvider;
             const key = AI_CONFIG.keys[provider];
-
             let text = activeSelectedText;
-            if (!text) {
-                text = (currentMode === 'pdf') ? pdfWords.join(" ") : document.getElementById('text-reader-display').innerText;
+            if (!text) text = (currentMode === 'pdf') ? pdfWords.join(" ") : document.getElementById('text-reader-display').innerText;
+            if (provider !== 'ollama' && (!key || key.length < 10)) {
+                if (typeof showToast !== 'undefined') return showToast(`Add your ${provider.toUpperCase()} key first`);
+                else return alert(`Add your ${provider.toUpperCase()} key first`);
             }
-
-            if (!key || (key.length < 10 && provider !== 'ollama')) {
-                return alert(`âš  Please add your ${provider.toUpperCase()} config first!`);
+            if (provider === 'ollama' && !key) {
+                AI_CONFIG.keys.ollama = DEFAULT_OLLAMA_URL;
+                localStorage.setItem('AI_CONFIG', JSON.stringify(AI_CONFIG));
             }
-
-            if (!text.trim()) return alert("âš  No content found to analyze.");
-
+            if (!text.trim()) {
+                if (typeof showToast !== 'undefined') return showToast("No content to analyze");
+                else return alert("No content to analyze");
+            }
             const modal = document.getElementById('ai-modal');
             const content = document.getElementById('modal-content');
             const title = document.getElementById('modal-title');
-            const copyBtn = document.querySelector('button[onclick*="copyModalText"]');
-
             modal.classList.remove('hidden');
-            content.innerText = `Consulting ${provider.toUpperCase()}...`;
-            title.innerText = action.charAt(0).toUpperCase() + action.slice(1) + " (AI Assistant)";
-            if (copyBtn) copyBtn.innerHTML = '<i class="fas fa-copy"></i> Copy Response';
-
-            let prompt = "";
-            if (action === 'summary') prompt = "Summarize the following text clearly:";
-            else if (action === 'explain') prompt = "Explain the concepts in the following text simply:";
-            else if (action === 'simplify') prompt = "Simplify this text so a 5th grader can understand:";
-            else if (action === 'quiz') prompt = "Generate 3 multiple choice questions based on this text:";
-            else if (action === 'cards') prompt = "Generate 3 flashcards (Front/Back) based on this text:";
-            else if (action === 'lecture') prompt = "Give a brief lecture transcript explaining this text:";
-            else prompt = "Answer the following question about this text:";
-
+            content.innerText = `Consulting ${provider.toUpperCase()}${provider === 'ollama' ? ' (' + (AI_CONFIG.ollamaModel || DEFAULT_OLLAMA_MODEL) + ')' : ''}...`;
+            title.innerText = action.charAt(0).toUpperCase() + action.slice(1) + " (AI)";
+            const prompts = {
+                summary: "Summarize the following text clearly and concisely:",
+                explain: "Explain the concepts in the following text in simple terms:",
+                simplify: "Simplify this text so a 5th grader can understand:",
+                quiz: "Generate 3 multiple choice questions (with answers) based on this text:",
+                cards: "Generate 3 flashcards in Front/Back format based on this text:",
+                lecture: "Give a brief lecture-style explanation of this text:",
+                ask: "Answer the following question about this text:"
+            };
+            const prompt = prompts[action] || "Answer the following question about this text:";
             try {
                 let url = "", body = {}, headers = { 'Content-Type': 'application/json' };
-
                 if (provider === 'gemini') {
                     url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`;
                     body = { contents: [{ parts: [{ text: prompt + "\n\n" + text }] }] };
                 } else if (provider === 'openai' || provider === 'meta' || provider === 'deepseek') {
-                    // Standardize on OpenAI-compatible endpoints
-                    url = provider === 'openai' ? "https://api.openai.com/v1/chat/completions" :
-                        provider === 'deepseek' ? "https://api.deepseek.com/chat/completions" :
-                            "https://api.groq.com/openai/v1/chat/completions"; // Default Meta/Llama via Groq
-
+                    url = provider === 'openai' ? "https://api.openai.com/v1/chat/completions"
+                        : provider === 'deepseek' ? "https://api.deepseek.com/chat/completions"
+                            : "https://api.groq.com/openai/v1/chat/completions";
                     headers['Authorization'] = `Bearer ${key}`;
                     body = {
                         model: provider === 'openai' ? "gpt-4o-mini" : provider === 'deepseek' ? "deepseek-chat" : "llama-3.1-70b-versatile",
@@ -1421,36 +1604,39 @@ function toggleLoop() {
                     url = "https://api.anthropic.com/v1/messages";
                     headers['x-api-key'] = key;
                     headers['anthropic-version'] = '2023-06-01';
-                    body = {
-                        model: "claude-3-5-sonnet-20240620",
-                        max_tokens: 1024,
-                        messages: [{ role: "user", content: prompt + "\n\n" + text }]
-                    };
+                    body = { model: "claude-3-5-sonnet-20240620", max_tokens: 1024, messages: [{ role: "user", content: prompt + "\n\n" + text }] };
                 } else if (provider === 'ollama') {
-                    url = `${key}/api/generate`;
-                    body = { model: "llama3", prompt: prompt + "\n\n" + text, stream: false };
+                    const baseUrl = (key || DEFAULT_OLLAMA_URL).replace(/\/+$/, '');
+                    url = `${baseUrl}/api/generate`;
+                    body = { model: AI_CONFIG.ollamaModel || DEFAULT_OLLAMA_MODEL, prompt: prompt + "\n\n" + text, stream: false };
                 }
-
-                const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), provider === 'ollama' ? 120000 : 60000);
+                const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errText.substring(0, 200)}`);
+                }
                 const data = await response.json();
-
-                if (data.error) throw new Error(data.error.message || "API Error");
-
+                if (data.error) throw new Error(data.error.message || data.error || "API Error");
                 let resText = "";
                 if (provider === 'gemini') resText = data.candidates[0].content.parts[0].text;
                 else if (provider === 'openai' || provider === 'meta' || provider === 'deepseek') resText = data.choices[0].message.content;
                 else if (provider === 'claude') resText = data.content[0].text;
                 else if (provider === 'ollama') resText = data.response;
-
-                // Wrap response in spans for highlighting
                 let globalIdx = 0;
                 content.innerHTML = resText.split(/(\s+)/).map(word => {
                     if (!word.trim()) return word;
                     return `<span id="ai-word-${globalIdx++}" class="ai-word-span">${word}</span>`;
                 }).join("");
-
             } catch (err) {
-                content.innerText = `Error with ${provider}: ${err.message}`;
+                let msg = err.message || String(err);
+                if (err.name === 'AbortError') msg = 'Request timed out. Check that Ollama is running on your PC and reachable.';
+                else if (provider === 'ollama' && /Failed to fetch|NetworkError|ERR_/i.test(msg)) {
+                    msg = `Cannot reach Ollama at ${AI_CONFIG.keys.ollama}.\n\nChecklist:\n1. Ollama is running on your PC\n2. Phone is on the same Wi-Fi\n3. PC has OLLAMA_HOST=0.0.0.0:11434 set\n4. Firewall allows port 11434`;
+                }
+                content.innerText = `Error with ${provider.toUpperCase()}: ${msg}`;
             }
         }
 
