@@ -1,39 +1,47 @@
-# Android Build Files
-/build
-.gradle
-.idea
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Capacitor
+www/
+android/app/src/main/assets/public/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.iws
+*.ipr
+*.iml
+
+# Android
+.gradle/
+build/
+captures/
 *.apk
 *.aab
 *.jks
 *.keystore
 local.properties
-*.iml
-
-# Generated Files
-/captures
-.externalNativeBuild
-.cxx
-
-# IDE
-.idea/
-*.iws
-*.ipr
-*.iml
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Gradle
-.gradle/
+.externalNativeBuild/
+.cxx/
 gradlew
 gradlew.bat
 gradle/
 
-# Environment
+# Gemini / Internal
+.gemini/
+brain/
+*.log
+
+# Sensitive Files
+*.key
+*.pem
+config.json
 .env
 .env.local
