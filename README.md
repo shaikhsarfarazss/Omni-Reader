@@ -75,5 +75,5 @@ To use local Ollama models (e.g., `llama3`) for offline/private processing on yo
 
 ---
 
-Developed with ❤️ by **Sarfaraz Shaikh**
+Developed by **Sarfaraz Shaikh**
 *Transforming the way the world reads.*
