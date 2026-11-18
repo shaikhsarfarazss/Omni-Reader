@@ -32,7 +32,7 @@ fun PdfReaderScreen(
     Scaffold(
         topBar = {
             ReaderTopAppBar(
-                title = "OmniReader",
+                title = if (uiState.totalPages > 0) "OmniReader (Page ${uiState.currentPage + 1}/${uiState.totalPages})" else "OmniReader",
                 onBackClick = onNavigateBack,
                 onToolClick = { viewModel.setTool(it) },
                 onUndoClick = { viewModel.undo() },
@@ -49,8 +49,14 @@ fun PdfReaderScreen(
                 PlayerBar(
                     isReading = uiState.isReading,
                     onPlayPauseClick = {
-                        viewModel.toggleReading("Reading logic goes here")
-                    }
+                        viewModel.toggleReading()
+                    },
+                    onPreviousPage = if (uiState.currentPage > 0) {
+                        { viewModel.previousPage() }
+                    } else null,
+                    onNextPage = if (uiState.currentPage < uiState.totalPages - 1) {
+                        { viewModel.nextPage() }
+                    } else null
                 )
             }
         }

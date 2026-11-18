@@ -268,7 +268,7 @@
         document.addEventListener('click', (e) => {
             const dropdown = document.getElementById('ai-tools-dropdown');
             const button = e.target.closest('button[onclick*="toggleAITools"]');
-            if (!dropdown.contains(e.target) && !button) dropdown.classList.add('hidden');
+            if (dropdown && !dropdown.contains(e.target) && !button) dropdown.classList.add('hidden');
         });
 
         // LOW-LEVEL AI SERVICE CALLS (GEMMA 3 & CLOUD APIS)
@@ -338,7 +338,7 @@
                         : "https://api.groq.com/openai/v1/chat/completions";
                 headers['Authorization'] = `Bearer ${key}`;
                 body = {
-                    model: provider === 'openai' ? "gpt-4o-mini" : provider === 'deepseek' ? "deepseek-chat" : "llama-3.1-70b-versatile",
+                    model: provider === 'openai' ? "gpt-4o-mini" : provider === 'deepseek' ? "deepseek-chat" : "llama-3.3-70b-versatile",
                     messages: [
                         { role: "system", content: systemPrompt },
                         { role: "user", content: prompt }
@@ -349,6 +349,7 @@
                 url = "https://api.anthropic.com/v1/messages";
                 headers['x-api-key'] = key;
                 headers['anthropic-version'] = '2023-06-01';
+                headers['anthropic-dangerous-direct-browser-access'] = 'true';
                 body = {
                     model: "claude-3-5-sonnet-20240620",
                     max_tokens: 1536,
@@ -391,19 +392,7 @@
                     body.format = ollamaFormat;
                 }
 
-                try {
-                    fetch(`${baseUrl}/api/generate`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            model: AI_CONFIG.ollamaModel || DEFAULT_OLLAMA_MODEL,
-                            prompt: "hi",
-                            stream: false,
-                            keep_alive: "10m",
-                            options: { num_predict: 1 }
-                        })
-                    }).catch(() => { });
-                } catch (e) { }
+
             }
 
             const internalController = new AbortController();
@@ -416,8 +405,6 @@
                 body: JSON.stringify(body),
                 signal
             });
-            clearTimeout(timeoutId);
-
             if (!response.ok) {
                 const errText = await response.text();
                 throw new Error(`HTTP ${response.status}: ${errText.substring(0, 200)}`);
@@ -508,6 +495,7 @@
                     }
                 }
             } finally {
+                clearTimeout(timeoutId);
                 try { reader.releaseLock(); } catch (e) { }
             }
 
@@ -709,16 +697,20 @@
 
         function speakModalText() {
             synth.cancel();
-            const text = document.getElementById('modal-content').innerText;
-            // Build temporary word map for modal highlighting
-            const words = text.split(/\s+/);
-            readerTokenMeta.modal = words.map((w, i) => ({
-                word: w,
-                index: i,
-                isModal: true
-            }));
+            const content = document.getElementById('modal-content');
+            if (!content) return;
+            const text = content.innerText.trim();
+            if (!text) return;
+            const words = text.split(/\s+/).filter(Boolean);
+            utteranceWordMap = [];
+            let pos = 0;
+            words.forEach((w, i) => {
+                if (i > 0) pos += 1;
+                utteranceWordMap.push({ start: pos, end: pos + w.length, index: i, word: w, type: 'modal' });
+                pos += w.length;
+            });
             isPlaying = true;
             updateUI();
-            synth.speak(text, speed, currentVoice ? currentVoice.name : null);
+            synth.speak(words.join(' '), speed, currentVoice ? currentVoice.name : null);
         }
 

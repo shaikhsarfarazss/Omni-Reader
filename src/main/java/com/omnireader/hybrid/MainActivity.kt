@@ -134,14 +134,7 @@ class NativeTTS : Plugin() {
             Log.d(TAG, "TTS Init finished with status: $status, isReady: $isReady")
 
             if (isReady) {
-                try {
-                    val installIntent = Intent()
-                    installIntent.action = TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA
-                    installIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(installIntent)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to launch TTS install intent", e)
-                }
+
 
                 val result = tts?.setLanguage(Locale.getDefault())
                 Log.d(TAG, "TTS Language default set result: $result")
@@ -226,7 +219,7 @@ class NativeTTS : Plugin() {
     fun speak(call: PluginCall) {
         val text = call.getString("text") ?: return call.reject("No text provided")
         val rate = call.getFloat("rate", 1.0f)!!
-        val voiceName = call.getString("voice")
+        val voiceName = call.getString("voiceName") ?: call.getString("voice")
 
         if (!isReady) {
             Log.w(TAG, "TTS not ready, retrying in 1000ms")
@@ -315,6 +308,23 @@ class NativeTTS : Plugin() {
         } catch (e: Exception) {
             Log.e(TAG, "TTS speak exception: ${e.message}", e)
             call.reject("TTS speak failed: ${e.message}")
+        }
+    }
+
+    @PluginMethod
+    fun setVoice(call: PluginCall) {
+        val voiceName = call.getString("voiceName") ?: call.getString("voice")
+        if (voiceName == null) {
+            call.reject("No voiceName provided")
+            return
+        }
+        val selectedVoice = tts?.voices?.find { it.name == voiceName }
+        if (selectedVoice != null) {
+            tts?.voice = selectedVoice
+            tts?.language = selectedVoice.locale
+            call.resolve()
+        } else {
+            call.reject("Voice not found: $voiceName")
         }
     }
 

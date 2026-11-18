@@ -71,11 +71,30 @@ class PdfReaderViewModel @Inject constructor(
         }
     }
 
+    private var lastRenderWidth: Int = 0
+    private var lastRenderHeight: Int = 0
+
     fun renderPage(pageIndex: Int, width: Int, height: Int) {
+        lastRenderWidth = width
+        lastRenderHeight = height
         viewModelScope.launch(errorHandler) {
             repository.renderPage(pageIndex, width, height).onSuccess { bitmap ->
                 _uiState.value = _uiState.value.copy(currentBitmap = bitmap, currentPage = pageIndex)
             }
+        }
+    }
+
+    fun previousPage() {
+        val prev = _uiState.value.currentPage - 1
+        if (prev >= 0 && lastRenderWidth > 0 && lastRenderHeight > 0) {
+            renderPage(prev, lastRenderWidth, lastRenderHeight)
+        }
+    }
+
+    fun nextPage() {
+        val next = _uiState.value.currentPage + 1
+        if (next < _uiState.value.totalPages && lastRenderWidth > 0 && lastRenderHeight > 0) {
+            renderPage(next, lastRenderWidth, lastRenderHeight)
         }
     }
 
@@ -130,14 +149,19 @@ class PdfReaderViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(errorMessage = "PDF export is available in the web editor.")
     }
 
-    fun toggleReading(text: String) {
+    fun toggleReading(customText: String? = null) {
         // M-11: Don't manually flip state — let UtteranceProgressListener callbacks
         // be the single source of truth to prevent race conditions
         if (_uiState.value.isReading) {
             tts?.stop()
             // onStop/onDone callback will set isReading = false
         } else {
-            tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "1")
+            val textToRead = if (!customText.isNullOrBlank()) {
+                customText
+            } else {
+                "Reading page ${_uiState.value.currentPage + 1} of ${_uiState.value.totalPages}."
+            }
+            tts?.speak(textToRead, TextToSpeech.QUEUE_FLUSH, null, "omni_page_${_uiState.value.currentPage}")
             // onStart callback will set isReading = true
         }
     }
